@@ -16,6 +16,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_absolute_error, root_mean_squared_error, r2_score
 import json
 import pickle
+import joblib
 
 rpth = Path(os.path.abspath(__file__)).parent.parent/"src"
 sys.path.append(str(rpth))
@@ -32,7 +33,7 @@ def lgb_train_model(train_x, train_y, df_train, test_x, test_y, df_test, dev_x, 
 
     model = lgb.train(params, 
         lgb_train, 
-        num_boost_round = 1000,
+        num_boost_round = 100,
         valid_sets=[valid_data],
         valid_names=['valid'],
         callbacks=[
@@ -46,64 +47,70 @@ def lgb_train_model(train_x, train_y, df_train, test_x, test_y, df_test, dev_x, 
     df_test['predict'] = df_test['predict_log'].apply(lambda x: int(np.exp(x)))
 
     if checkpoint_name:
-        model.save_model(checkpoint_name)
+        # model.save_model(checkpoint_name, num_iteration=model.best_iteration)
+        joblib.dump(model, checkpoint_name + ".pkl")
 
     return df_test
 
+def fill_hole_lease(x):
+    if x.remaining_lease:
+        return x.remaining_lease
+    else:
+        return int(x.month.year) - int(x.lease_commence_date) + 1 if x.lease_commence_date else None
+    
+def floor_cat(floor_tag):
+    x = list(map(lambda x: x.strip(), floor_tag.strip().split(" ")))
+    if int(x[2]) <= 4:
+        return "1" #"low"
+    elif int(x[2]) <= 8:
+        return "2" #middle
+    else:
+        return "3" #"high"
+    
+def rem_lease(s):
+    try:
+        x = list(map(lambda x: x.strip(), s.strip().split(" ")))
+    except:
+        try:
+            x = int(s)
+            return x
+        except:
+            return None
+    try:
+        y = int(x)
+    except:
+        y = 0
+    try:
+        y2 = int(2)
+        y2 = round(y2 / 12, 2)
+    except:
+        y2 = 0
+    y = y + y2
+    return y 
+
+def flat_type_norm(s):
+    if s == "MULTI GENERATION":
+        return "MULTI-GENERATION"
+    else:
+        return s
+
 def train_eval(testid = "regres_lgb_20250620", checkpoint_path = "./checkpoint"):
-    checkpoint_name = os.path.join(checkpoint_path, f"{testid}.model")
+    checkpoint_name = os.path.join(checkpoint_path, f"{testid}.txt")
+    checkpoint_name_scale = os.path.join(checkpoint_path, f"{testid}.scale")
 
     sql_str = """SELECT * FROM hdb_resale_transactions;"""
     df = qstdb.query(sql_str)
     df["month"] = df["month"].apply(lambda x: datetime.strptime(x, "%Y-%m"))
 
-    def fill_hole_lease(x):
-        if x.remaining_lease:
-            return x.remaining_lease
-        else:
-            return int(x.month.year) - int(x.lease_commence_date) + 1 if x.lease_commence_date else None
     df["remaining_lease"] = df.apply(lambda x: fill_hole_lease(x), axis = 1)
     idx = "month"
     feat_cols = ["town", "flat_type", "storey_range", "floor_area_sqm", "remaining_lease"]
     target = "resale_price"
     df = df.sort_values(by = "month", ascending=True)[[idx] + feat_cols + [target]]
     # feature prepare
-    def floor_cat(floor_tag):
-        x = list(map(lambda x: x.strip(), floor_tag.strip().split(" ")))
-        if int(x[2]) <= 4:
-            return 1 #"low"
-        elif int(x[2]) <= 8:
-            return 2 #middle
-        else:
-            return 3 #"high"
-    def rem_lease(s):
-        try:
-            x = list(map(lambda x: x.strip(), s.strip().split(" ")))
-        except:
-            try:
-                x = int(s)
-                return x
-            except:
-                return None
-        try:
-            y = int(x)
-        except:
-            y = 0
-        try:
-            y2 = int(2)
-            y2 = round(y2 / 12, 2)
-        except:
-            y2 = 0
-        y = y + y2
-        return y 
-    def flat_type(s):
-        if s == "MULTI GENERATION":
-            return "MULTI-GENERATION"
-        else:
-            return s
-    df["storey_range"] = df["storey_range"].apply(lambda x: floor_cat(x))
+    df["storey_range"] = df["storey_range"].apply(lambda x: floor_cat(x)).astype("category")
     df["remaining_lease"] = df["remaining_lease"].apply(lambda x: rem_lease(x))
-    df["flat_type"] = df["flat_type"].apply(lambda x: flat_type(x))
+    df["flat_type"] = df["flat_type"].apply(lambda x: flat_type_norm(x))
     df.dropna(how = "any", inplace=True)
     df = df[df["remaining_lease"] > 0]
     df["remaining_lease"] = df["remaining_lease"].apply(np.log)
@@ -123,16 +130,16 @@ def train_eval(testid = "regres_lgb_20250620", checkpoint_path = "./checkpoint")
     df_dev = df[df["month"].isin(split_dt["dev"])]
     df_test = df[df["month"].isin(split_dt["test"])]
 
-    #flat type
-    twon_set = dict(map(lambda x: (x[1], x[0] + 1), enumerate(df_train["town"].unique())))
-    df_train["town_tag"] = df_train["town"].apply(lambda x: twon_set.get(x, None))
-    df_dev["town_tag"] = df_dev["town"].apply(lambda x: twon_set.get(x, None))
-    df_test["town_tag"] = df_test["town"].apply(lambda x: twon_set.get(x, None))
+    #flat type, twon_set, flat_set
+    twon_set = dict(map(lambda x: (x[1], str(x[0] + 1)), enumerate(df_train["town"].unique())))
+    df_train["town_tag"] = df_train["town"].apply(lambda x: twon_set.get(x, None)).astype("category")
+    df_dev["town_tag"] = df_dev["town"].apply(lambda x: twon_set.get(x, None)).astype("category")
+    df_test["town_tag"] = df_test["town"].apply(lambda x: twon_set.get(x, None)).astype("category")
 
-    flat_set = dict(map(lambda x: (x[1], x[0] + 1), enumerate(df_train["flat_type"].unique())))
-    df_train["flat_type_tag"] = df_train["flat_type"].apply(lambda x: flat_set.get(x, None))
-    df_dev["flat_type_tag"] = df_dev["flat_type"].apply(lambda x: flat_set.get(x, None))
-    df_test["flat_type_tag"] = df_test["flat_type"].apply(lambda x: flat_set.get(x, None))
+    flat_set = dict(map(lambda x: (x[1], str(x[0] + 1)), enumerate(df_train["flat_type"].unique())))
+    df_train["flat_type_tag"] = df_train["flat_type"].apply(lambda x: flat_set.get(x, None)).astype("category")
+    df_dev["flat_type_tag"] = df_dev["flat_type"].apply(lambda x: flat_set.get(x, None)).astype("category")
+    df_test["flat_type_tag"] = df_test["flat_type"].apply(lambda x: flat_set.get(x, None)).astype("category")
 
     df_train["floor_area_sqm"] = df_train["floor_area_sqm"].apply(np.log)
     df_dev["floor_area_sqm"] = df_dev["floor_area_sqm"].apply(np.log)
@@ -220,6 +227,8 @@ def train_eval(testid = "regres_lgb_20250620", checkpoint_path = "./checkpoint")
         sender.dataframe(dd, table_name = hdb_resale_price_experiment_meta_tb, at = TimestampNanos.now())
         sender.flush() 
 
+    with open(checkpoint_name_scale, "wb") as fo:
+        pickle.dump([scaler, feat_meta, twon_set, flat_set], fo) 
 
 if __name__ == "__main__":
     train_eval()

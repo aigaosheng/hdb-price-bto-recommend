@@ -24,4 +24,8 @@ Fields: month, town, flat_type, storey_range, floor_area_sqm, flat_model, lease_
 ## Process flow
 1. Start questdb_data server
 ```sudo docker run -p 9000:9000 -p 9009:9009 -p 8812:8812 -v /home/gs/work/db_setup/questdb_data:/var/lib/questdb questdb/questdb```
-2. ```python create_db.py```
+2. ```python src/create_db.py```
+3. Fetch data to DB: ```python src/data_fetch.py```
+4. Train & evaluation, save model & result to DB: ```python src/forecast.py```
+5. Rescale price forecasting API: ```python src/app.py```
+6. Test endpoint: ```python src/test_endpoint.py```
