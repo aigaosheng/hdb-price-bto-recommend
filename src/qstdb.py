@@ -58,6 +58,19 @@ def query(sql_str):
 
     return df
 
+async def query_data(sql_str):
+    conn = await asyncpg.connect(
+        host = os.getenv("QDB_HOST"),
+        port = os.getenv("QDB_PORT_READ"), #8812
+        user = os.getenv("QDB_USER"),
+        password = os.getenv("QDB_PWD"),
+        database = os.getenv("QDB_DB"), #'qdb'
+    )
+    
+    rows = await conn.fetch(sql_str)
+    df = pd.DataFrame([dict(row) for row in rows])        
+    return df
+
 def execute(sql_str, data = None):
     """
     Execute command. Data is None for command e.g. create, drop

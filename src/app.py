@@ -1,16 +1,16 @@
 from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
 import uvicorn
-from datetime import datetime
+from datetime import datetime, timedelta
 import asyncio
-import lightgbm as lgb
 import pickle
 import pandas as pd
 import numpy as np
 import joblib
 from forecast import *
+from llm import LLMMarketAnalyst
+from loguru import logger
 
 app = FastAPI(
     title="HDB Price Prediction & BTO Recommendation API",
@@ -35,11 +35,14 @@ class PricePredictionRequest(BaseModel):
     
 class PricePredictionResponse(BaseModel):
     predicted_price: int
+    analysis: str
 
 # Load the model from file
 model = joblib.load("./checkpoint/regres_lgb_20250620.txt.pkl")
 with open("./checkpoint/regres_lgb_20250620.scale", "rb") as fo:
     scaler, feat_meta, twon_set, flat_set = pickle.load(fo)
+
+agent = LLMMarketAnalyst()
 
 # API Routes
 @app.get("/healthcheck")
@@ -67,9 +70,23 @@ async def predict_price(request: PricePredictionRequest):
         test_x_scaled = pd.concat([test_x_scaled_num, input_data[feat_meta["cat"]].reset_index(drop=True)], axis=1)
 
         prediction = model.predict(test_x_scaled)
+
+        #agent analysis
+        qflat = input_data["flat_type"]
+        qtown = input_data["town"]
+        dt_first = (datetime.now() - timedelta(days = 365 * 2)).strftime("%Y-%m")
+        sql_str = f"""SELECT month, flat_type, storey_range, floor_area_sqm, resale_price FROM hdb_resale_transactions 
+        where month>='{dt_first}' AND town='{qtown}' AND flat_type='{qflat}' ORDER BY month ASC;
+        """
+        logger.info(sql_str)
+        price_data = await qstdb.query_data(sql_str)
+        comparative_data = ""
+        result = agent.analyze_market_trends(qtown, price_data, comparative_data)
+        logger.info(result)
                 
         return PricePredictionResponse(
             predicted_price = int(np.exp(prediction[0])),
+            analysis = result,
         )
         
     except Exception as e:

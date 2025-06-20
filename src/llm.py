@@ -1,11 +1,13 @@
-import openai
-from langchain.llms import OpenAI
+from langchain_ollama.llms import OllamaLLM
+
 from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
+import qstdb
+from datetime import datetime, timedelta
 
 class LLMMarketAnalyst:
-    def __init__(self, api_key):
-        self.llm = OpenAI(api_key=api_key, temperature=0.3)
+    def __init__(self, model_name="gemma3"):
+        self.llm = OllamaLLM(model=model_name, temperature=0.1)
         self.setup_prompt_templates()
     
     def setup_prompt_templates(self):
@@ -29,68 +31,24 @@ class LLMMarketAnalyst:
             Provide specific, data-driven insights in a professional tone.
             """
         )
-        
-        self.bto_recommendation_template = PromptTemplate(
-            input_variables=["requirements", "analysis", "constraints"],
-            template="""
-            As an urban planning consultant, recommend optimal locations for 
-            HDB BTO development based on:
             
-            Requirements: {requirements}
-            Market Analysis: {analysis}
-            Constraints: {constraints}
-            
-            Provide:
-            1. Top 3 recommended locations with detailed justification
-            2. Expected pricing for different unit types
-            3. Target demographics and affordability analysis
-            4. Infrastructure and amenity considerations
-            5. Implementation timeline and risks
-            
-            Format as a structured report with clear recommendations.
-            """
-        )
-    
     def analyze_market_trends(self, town, price_data, comparative_data):
         """Generate market trend analysis"""
         chain = LLMChain(llm=self.llm, prompt=self.price_analysis_template)
-        
-        analysis = chain.run(
+        return chain.run(
             town=town,
             price_data=price_data,
             market_trends=comparative_data
         )
-        
-        return analysis
     
-    def generate_bto_recommendations(self, requirements, analysis_data):
-        """Generate BTO development recommendations"""
-        chain = LLMChain(llm=self.llm, prompt=self.bto_recommendation_template)
-        
-        recommendations = chain.run(
-            requirements=requirements,
-            analysis=analysis_data,
-            constraints="Budget constraints, land availability, infrastructure capacity"
-        )
-        
-        return recommendations
-    
-    def explain_price_prediction(self, prediction, factors):
-        """Explain price prediction with key factors"""
-        prompt = f"""
-        Explain this HDB resale price prediction in simple terms:
-        
-        Predicted Price: ${prediction:,.2f}
-        Key Factors: {factors}
-        
-        Provide a clear explanation of:
-        1. Why this price is reasonable
-        2. Main factors influencing the price
-        3. Potential risks or uncertainties
-        4. Market context
-        
-        Keep explanation accessible to general public.
-        """
-        
-        response = self.llm(prompt)
-        return response
+if __name__ == "__main__":
+    agent = LLMMarketAnalyst()
+    town = "ANG MO KIO"
+    dt_first = (datetime.now() - timedelta(days = 365 * 2)).strftime("%Y-%m")
+    sql_str = f"""SELECT month, flat_type, storey_range, floor_area_sqm, resale_price FROM hdb_resale_transactions 
+    where month>='{dt_first}' AND town='{town}' ORDER BY month ASC;
+    """
+    price_data = qstdb.query(sql_str)
+    comparative_data = ""
+    result = agent.analyze_market_trends(town, price_data, comparative_data)
+    print(result)

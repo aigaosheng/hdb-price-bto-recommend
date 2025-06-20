@@ -11,4 +11,11 @@ payload = {
 }
 
 response = requests.post(url, json=payload)
-print(response.json())
+rsp = response.json()
+
+with open("test_api_output.txt", "wt") as fo:
+    fo.write(f"Predicted_price : {rsp['predicted_price']}\n")
+    fo.write(f"Analysis\n{rsp['analysis']}")
+print(f"predicted_price : {rsp['predicted_price']}")
+print(f"Analysis\n{rsp['analysis']}")
+

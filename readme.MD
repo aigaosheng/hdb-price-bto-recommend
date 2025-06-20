@@ -29,3 +29,11 @@ Fields: month, town, flat_type, storey_range, floor_area_sqm, flat_model, lease_
 4. Train & evaluation, save model & result to DB: ```python src/forecast.py```
 5. Rescale price forecasting API: ```python src/app.py```
 6. Test endpoint: ```python src/test_endpoint.py```
+    - Query example: ```payload = {
+    "flat_type": "4 ROOM",
+    "floor_area_sqm": 93.0,
+    "storey_range": "10 TO 12",
+    "lease_commence_date": 2005,
+    "town": "ANG MO KIO"
+    }```
+    - [Query response results](test_api_output.txt)
