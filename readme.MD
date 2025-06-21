@@ -27,6 +27,8 @@ Fields: month, town, flat_type, storey_range, floor_area_sqm, flat_model, lease_
 2. ```python src/create_db.py```
 3. Fetch data to DB: ```python src/data_fetch.py```
 4. Train & evaluation, save model & result to DB: ```python src/forecast.py```
+    - Metric on test set: 
+    ```Testid: regres_lgb_20250620, {"mae": 289196.08727202355, "rmse": 318385.6042422002, "r2": -1.9980424481612467}```
 5. Rescale price forecasting API: ```python src/app.py```
 6. Test endpoint: ```python src/test_endpoint.py```
     - Query example: ```payload = {
