@@ -51,3 +51,5 @@ Fields: month, town, flat_type, storey_range, floor_area_sqm, flat_model, lease_
 | 66557.71670515781  | 61387.47222138814  | 48896.0  | 1299   | 1 ROOM           |
 | 620091.6818181818  | 208098.15243464347 | 540672.0 | 264    | MULTI-GENERATION |
 | 453941.17562724015 | 146596.5433985299  | 466944.0 | 279    | MULTI GENERATION |
+
+- [TODO] Balance samples in training set. e.g refer to EXECUTIVE 68K, others sampling 68K * ratio (e.g. 2), because predict result analysis show predict price < ground truth . 
